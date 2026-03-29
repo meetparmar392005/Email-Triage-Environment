@@ -1,0 +1,22 @@
+name: email-triage-env
+version: "1.0.0"
+description: >
+  An RL environment for email triage. Agents learn to classify spam,
+  prioritize emails by urgency, and draft contextual replies.
+tags:
+  - openenv
+  - email
+  - triage
+  - nlp
+tasks:
+  - id: easy
+    description: Classify emails as spam or not-spam
+    difficulty: easy
+  - id: medium
+    description: Assign priority level (critical/high/medium/low)
+    difficulty: medium
+  - id: hard
+    description: Draft a professional reply to the email
+    difficulty: hard
+sdk: docker
+app_port: 7860

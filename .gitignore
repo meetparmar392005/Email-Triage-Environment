@@ -1,0 +1,37 @@
+# Virtual environment
+venv/
+.venv/
+env/
+
+# Pip editable install artifacts
+*.egg-info/
+*.egg
+dist/
+build/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Environment variables
+.env
+.env.local
+
+# VS Code
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs & outputs
+*.log
+outputs/
+logs/
+
+# Docker
+*.tar
+
+# HuggingFace cache
+.cache/
