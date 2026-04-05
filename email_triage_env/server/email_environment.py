@@ -14,6 +14,8 @@ class EmailEnvironment(Environment):
         self._history: list = []
         self._done: bool = False
         self._cumulative_score: float = 0.0
+        self._last_score: float = 0.0
+        self._last_reason: str = ""
 
     def reset(self, task_id: str = "easy") -> EmailObservation:
         if task_id not in TASKS:
@@ -24,6 +26,8 @@ class EmailEnvironment(Environment):
         self._history = []
         self._done = False
         self._cumulative_score = 0.0
+        self._last_score = 0.0
+        self._last_reason = ""
         task = TASKS[task_id]
         self._email = task.sample_email()
 
@@ -44,6 +48,8 @@ class EmailEnvironment(Environment):
 
         self._step_num += 1
         self._cumulative_score += score
+        self._last_score = score
+        self._last_reason = reason
         self._history.append({
             "step": self._step_num,
             "action_type": action.action_type,
@@ -72,3 +78,18 @@ class EmailEnvironment(Environment):
             done=self._done,
             cumulative_score=round(self._cumulative_score, 4),
         )
+
+    def grader_result(self) -> dict:
+        return {
+            "task_id": self._task_id,
+            "done": self._done,
+            "step_num": self._step_num,
+            "last_score": round(self._last_score, 4),
+            "last_reason": self._last_reason,
+            "cumulative_score": round(self._cumulative_score, 4),
+            "max_possible_cumulative": float(self.MAX_STEPS),
+            "normalized_score": round(
+                min(1.0, max(0.0, self._cumulative_score / float(self.MAX_STEPS))), 4
+            ),
+            "history": self._history.copy(),
+        }

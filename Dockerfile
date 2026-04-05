@@ -2,13 +2,10 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install openenv-core and dependencies
-RUN pip install --no-cache-dir openenv-core fastapi uvicorn
+RUN pip install --no-cache-dir openenv-core fastapi uvicorn openai httpx
 
-# Copy the full package
 COPY . .
 
-# Install the environment package itself
 RUN pip install --no-cache-dir -e .
 
 EXPOSE 7860
