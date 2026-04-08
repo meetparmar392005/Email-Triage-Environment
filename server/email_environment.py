@@ -142,9 +142,12 @@ class EmailEnvironment:
         """Get grader result with error handling."""
         try:
             # Safely compute normalized score
-            max_possible = float(self.MAX_STEPS)
+            # Use actual steps taken, not MAX_STEPS, to reward efficiency
+            actual_steps = max(1, self._step_num)  # At least 1 step
             cumulative = float(self._cumulative_score)
-            normalized = cumulative / max_possible if max_possible > 0 else 0.0
+            
+            # Normalized score = average reward per step taken
+            normalized = cumulative / float(actual_steps)
             normalized = min(1.0, max(0.0, normalized))
             
             return {
@@ -154,7 +157,7 @@ class EmailEnvironment:
                 "last_score": round(float(self._last_score), 4),
                 "last_reason": str(self._last_reason),
                 "cumulative_score": round(cumulative, 4),
-                "max_possible_cumulative": max_possible,
+                "max_possible_cumulative": float(self.MAX_STEPS),
                 "normalized_score": round(normalized, 4),
                 "history": self._history.copy(),
             }
