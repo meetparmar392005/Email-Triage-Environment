@@ -16,78 +16,158 @@ class EmailEnvironment:
         self._last_reason: str = ""
 
     def reset(self, task_id: str = "easy") -> EmailObservation:
-        if task_id not in TASKS:
-            raise ValueError(f"Unknown task '{task_id}'. Valid: {list(TASKS)}")
+        """Reset environment with robust error handling."""
+        try:
+            # Validate task_id
+            if not task_id or not isinstance(task_id, str):
+                raise ValueError(f"Invalid task_id: {task_id}")
+            
+            if task_id not in TASKS:
+                raise ValueError(f"Unknown task '{task_id}'. Valid: {list(TASKS.keys())}")
 
-        self._task_id = task_id
-        self._step_num = 0
-        self._history = []
-        self._done = False
-        self._cumulative_score = 0.0
-        self._last_score = 0.0
-        self._last_reason = ""
-        task = TASKS[task_id]
-        self._email = task.sample_email()
+            # Reset state
+            self._task_id = task_id
+            self._step_num = 0
+            self._history = []
+            self._done = False
+            self._cumulative_score = 0.0
+            self._last_score = 0.0
+            self._last_reason = ""
+            
+            # Sample email
+            task = TASKS[task_id]
+            self._email = task.sample_email()
+            
+            # Validate email
+            if not isinstance(self._email, dict):
+                raise ValueError("Invalid email format")
 
-        return EmailObservation(
-            task_id=task_id,
-            email=self._email,
-            history=[],
-            step_num=0,
-            instructions=task.instructions,
-        )
+            return EmailObservation(
+                task_id=task_id,
+                email=self._email,
+                history=[],
+                step_num=0,
+                instructions=task.instructions,
+            )
+        except ValueError:
+            raise
+        except Exception as e:
+            raise RuntimeError(f"Reset failed: {str(e)}") from e
 
     def step(self, action: EmailAction) -> tuple[EmailObservation, float, bool]:
-        if self._done:
-            raise RuntimeError("Episode is done. Call reset() to start a new one.")
+        """Execute step with robust error handling."""
+        try:
+            # Validate episode state
+            if self._done:
+                raise RuntimeError("Episode is done. Call reset() to start a new one.")
+            
+            # Validate action
+            if not isinstance(action, EmailAction):
+                raise TypeError(f"Expected EmailAction, got {type(action)}")
+            
+            if not hasattr(action, 'action_type') or not hasattr(action, 'value'):
+                raise ValueError("Invalid action: missing action_type or value")
 
-        task = TASKS[self._task_id]
-        score, reason = task.grade(action, self._email)
+            # Get task and grade action
+            task = TASKS.get(self._task_id)
+            if not task:
+                raise RuntimeError(f"Invalid task_id: {self._task_id}")
+            
+            score, reason = task.grade(action, self._email)
+            
+            # Ensure score is in valid range
+            score = float(score)
+            score = min(1.0, max(0.0, score))
 
-        self._step_num += 1
-        self._cumulative_score += score
-        self._last_score = score
-        self._last_reason = reason
-        self._history.append({
-            "step": self._step_num,
-            "action_type": action.action_type,
-            "value": action.value[:100],   # truncate for storage
-            "score": score,
-            "reason": reason,
-        })
+            # Update state
+            self._step_num += 1
+            self._cumulative_score += score
+            self._last_score = score
+            self._last_reason = str(reason)
+            
+            # Safely truncate action value
+            action_value = str(action.value) if action.value is not None else ""
+            self._history.append({
+                "step": self._step_num,
+                "action_type": str(action.action_type),
+                "value": action_value[:100],
+                "score": round(score, 4),
+                "reason": str(reason),
+            })
 
-        # Episode ends on a perfect score OR hitting max steps
-        done = (score == 1.0) or (self._step_num >= self.MAX_STEPS)
-        self._done = done
+            # Episode ends on a perfect score OR hitting max steps
+            done = (score >= 0.999) or (self._step_num >= self.MAX_STEPS)
+            self._done = done
 
-        obs = EmailObservation(
-            task_id=self._task_id,
-            email=self._email,
-            history=self._history.copy(),
-            step_num=self._step_num,
-            instructions=TASKS[self._task_id].instructions,
-        )
-        return obs, score, done
+            obs = EmailObservation(
+                task_id=self._task_id,
+                email=self._email,
+                history=self._history.copy(),
+                step_num=self._step_num,
+                instructions=TASKS[self._task_id].instructions,
+            )
+            return obs, score, done
+        except RuntimeError:
+            raise
+        except Exception as e:
+            # Return safe default on error
+            self._done = True
+            return EmailObservation(
+                task_id=self._task_id,
+                email=self._email,
+                history=self._history.copy(),
+                step_num=self._step_num,
+                instructions="Error occurred",
+            ), 0.0, True
 
     def state(self) -> EmailState:
-        return EmailState(
-            task_id=self._task_id,
-            step_num=self._step_num,
-            done=self._done,
-            cumulative_score=round(self._cumulative_score, 4),
-        )
+        """Get current state with error handling."""
+        try:
+            return EmailState(
+                task_id=str(self._task_id),
+                step_num=int(self._step_num),
+                done=bool(self._done),
+                cumulative_score=round(float(self._cumulative_score), 4),
+            )
+        except Exception as e:
+            # Return safe default state
+            return EmailState(
+                task_id="error",
+                step_num=0,
+                done=True,
+                cumulative_score=0.0,
+            )
 
     def grader_result(self) -> dict:
-        return {
-            "task_id": self._task_id,
-            "done": self._done,
-            "step_num": self._step_num,
-            "last_score": round(self._last_score, 4),
-            "last_reason": self._last_reason,
-            "cumulative_score": round(self._cumulative_score, 4),
-            "max_possible_cumulative": float(self.MAX_STEPS),
-            "normalized_score": round(
-                min(1.0, max(0.0, self._cumulative_score / float(self.MAX_STEPS))), 4
-            ),
-            "history": self._history.copy(),
-        }
+        """Get grader result with error handling."""
+        try:
+            # Safely compute normalized score
+            max_possible = float(self.MAX_STEPS)
+            cumulative = float(self._cumulative_score)
+            normalized = cumulative / max_possible if max_possible > 0 else 0.0
+            normalized = min(1.0, max(0.0, normalized))
+            
+            return {
+                "task_id": str(self._task_id),
+                "done": bool(self._done),
+                "step_num": int(self._step_num),
+                "last_score": round(float(self._last_score), 4),
+                "last_reason": str(self._last_reason),
+                "cumulative_score": round(cumulative, 4),
+                "max_possible_cumulative": max_possible,
+                "normalized_score": round(normalized, 4),
+                "history": self._history.copy(),
+            }
+        except Exception as e:
+            # Return safe default result
+            return {
+                "task_id": "error",
+                "done": True,
+                "step_num": 0,
+                "last_score": 0.0,
+                "last_reason": f"Error: {str(e)}",
+                "cumulative_score": 0.0,
+                "max_possible_cumulative": float(self.MAX_STEPS),
+                "normalized_score": 0.0,
+                "history": [],
+            }

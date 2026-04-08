@@ -96,12 +96,29 @@ PRIORITY_SCORES = {"critical": 4, "high": 3, "medium": 2, "low": 1}
 # ── Graders ───────────────────────────────────────────────────────────────────
 
 def grade_classify(action, email) -> tuple:
-    if action.action_type != "classify":
-        return 0.0, f"Wrong action_type '{action.action_type}', expected 'classify'"
+    """Grade classification action with robust error handling."""
+    try:
+        # Validate action type
+        if not hasattr(action, 'action_type') or action.action_type != "classify":
+            return 0.0, f"Wrong action_type '{getattr(action, 'action_type', 'None')}', expected 'classify'"
 
-    answer = action.value.lower().strip()
-    domain = email.get("sender", "").split("@")[-1]
-    is_spam = domain in SPAM_DOMAINS
+        # Validate action value
+        if not hasattr(action, 'value') or action.value is None:
+            return 0.0, "Missing action value"
+        
+        answer = str(action.value).lower().strip()
+        if not answer:
+            return 0.0, "Empty action value"
+        
+        # Safely extract domain
+        sender = email.get("sender", "")
+        if not sender or "@" not in sender:
+            return 0.0, "Invalid email sender format"
+        
+        domain = sender.split("@")[-1]
+        is_spam = domain in SPAM_DOMAINS
+    except Exception as e:
+        return 0.0, f"Error processing classification: {str(e)}"
 
     spam_words = {"spam", "junk", "phishing", "scam", "fraudulent"}
     legit_words = {"not_spam", "not spam", "legitimate", "ham", "legit", "real"}
@@ -116,11 +133,23 @@ def grade_classify(action, email) -> tuple:
 
 
 def grade_prioritize(action, email) -> tuple:
-    if action.action_type != "prioritize":
-        return 0.0, f"Wrong action_type '{action.action_type}', expected 'prioritize'"
+    """Grade prioritization action with robust error handling."""
+    try:
+        # Validate action type
+        if not hasattr(action, 'action_type') or action.action_type != "prioritize":
+            return 0.0, f"Wrong action_type '{getattr(action, 'action_type', 'None')}', expected 'prioritize'"
 
-    answer = action.value.lower().strip()
-    expected = email.get("expected_priority", "medium")
+        # Validate action value
+        if not hasattr(action, 'value') or action.value is None:
+            return 0.0, "Missing action value"
+        
+        answer = str(action.value).lower().strip()
+        if not answer:
+            return 0.0, "Empty action value"
+        
+        expected = email.get("expected_priority", "medium")
+    except Exception as e:
+        return 0.0, f"Error processing prioritization: {str(e)}"
 
     if answer not in PRIORITY_SCORES:
         return 0.1, f"Invalid level '{answer}'. Use: critical / high / medium / low"
@@ -141,14 +170,23 @@ def _keywords(text: str) -> list:
 
 
 def grade_reply(action, email) -> tuple:
-    if action.action_type != "reply":
-        return 0.0, f"Wrong action_type '{action.action_type}', expected 'reply'"
+    """Grade reply action with robust error handling."""
+    try:
+        # Validate action type
+        if not hasattr(action, 'action_type') or action.action_type != "reply":
+            return 0.0, f"Wrong action_type '{getattr(action, 'action_type', 'None')}', expected 'reply'"
 
-    reply = action.value.strip()
-    if not reply:
-        return 0.0, "Empty reply"
-    if len(reply) < 20:
-        return 0.1, "Reply too short to be useful"
+        # Validate action value
+        if not hasattr(action, 'value') or action.value is None:
+            return 0.0, "Missing action value"
+        
+        reply = str(action.value).strip()
+        if not reply:
+            return 0.0, "Empty reply"
+        if len(reply) < 20:
+            return 0.1, "Reply too short to be useful"
+    except Exception as e:
+        return 0.0, f"Error processing reply: {str(e)}"
 
     score = 0.0
     reasons = []
@@ -174,7 +212,9 @@ def grade_reply(action, email) -> tuple:
         score += 0.2
         reasons.append("substantive response")
 
-    return round(min(1.0, score), 2), "; ".join(reasons) or "minimal reply"
+    # Ensure score is always in valid range
+    final_score = round(min(1.0, max(0.0, score)), 2)
+    return final_score, "; ".join(reasons) or "minimal reply"
 
 
 # ── Task class ────────────────────────────────────────────────────────────────
@@ -187,10 +227,30 @@ class Task:
         self.instructions = instructions
 
     def sample_email(self) -> dict:
-        return random.choice(self.email_pool)
+        """Sample a random email from the pool with error handling."""
+        try:
+            if not self.email_pool:
+                raise ValueError(f"Empty email pool for task '{self.task_id}'")
+            return random.choice(self.email_pool)
+        except Exception as e:
+            # Return a default email if sampling fails
+            return {
+                "subject": "Error",
+                "sender": "error@system.local",
+                "body": f"Error sampling email: {str(e)}",
+                "timestamp": "2024-01-15T00:00:00",
+            }
 
     def grade(self, action, email) -> tuple:
-        return self.grader_fn(action, email)
+        """Grade an action with error handling."""
+        try:
+            score, reason = self.grader_fn(action, email)
+            # Ensure score is always in valid range [0.0, 1.0]
+            score = float(score)
+            score = min(1.0, max(0.0, score))
+            return score, str(reason)
+        except Exception as e:
+            return 0.0, f"Grading error: {str(e)}"
 
 
 # ── Task registry ─────────────────────────────────────────────────────────────

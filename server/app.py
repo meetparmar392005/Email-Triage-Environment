@@ -36,103 +36,180 @@ VALUE: <answer>
 
 
 def _parse_llm_response(text: str) -> EmailAction:
-    action_type = "classify"
-    value = ""
-    for line in text.strip().splitlines():
-        if line.startswith("ACTION_TYPE:"):
-            action_type = line.split(":", 1)[1].strip().lower()
-        elif line.startswith("VALUE:"):
-            value = line.split(":", 1)[1].strip()
-    return EmailAction(action_type=action_type, value=value)
+    """Parse LLM response with error handling."""
+    try:
+        action_type = "classify"
+        value = ""
+        
+        if not text:
+            return EmailAction(action_type=action_type, value=value)
+        
+        for line in str(text).strip().splitlines():
+            line = line.strip()
+            if line.startswith("ACTION_TYPE:"):
+                action_type = line.split(":", 1)[1].strip().lower()
+            elif line.startswith("VALUE:"):
+                value = line.split(":", 1)[1].strip()
+        
+        return EmailAction(action_type=action_type, value=value)
+    except Exception:
+        # Return safe default on parse error
+        return EmailAction(action_type="classify", value="")
 
 
 def _build_user_prompt(observation: dict[str, Any], task_id: str) -> str:
-    email = observation.get("email", {})
-    return (
-        f"Task ID: {task_id}\n"
-        f"Instructions: {observation.get('instructions', '')}\n\n"
-        f"From: {email.get('sender', '')}\n"
-        f"Subject: {email.get('subject', '')}\n"
-        f"Body: {email.get('body', '')}"
-    )
+    """Build user prompt with error handling."""
+    try:
+        email = observation.get("email", {})
+        if not isinstance(email, dict):
+            email = {}
+        
+        return (
+            f"Task ID: {task_id}\n"
+            f"Instructions: {observation.get('instructions', '')}\n\n"
+            f"From: {email.get('sender', '')}\n"
+            f"Subject: {email.get('subject', '')}\n"
+            f"Body: {email.get('body', '')}"
+        )
+    except Exception:
+        return f"Task ID: {task_id}\nError building prompt"
 
 
 def _run_baseline_episode(client: OpenAI, model_name: str, task_id: str, max_steps: int = 5) -> dict:
-    env = get_env()
-    obs = env.reset(task_id=task_id).__dict__
-    rewards: list[float] = []
-    done = False
+    """Run baseline episode with comprehensive error handling."""
+    try:
+        env = get_env()
+        obs = env.reset(task_id=task_id).__dict__
+        rewards: list[float] = []
+        done = False
 
-    for _ in range(max_steps):
-        if done:
-            break
-        user_prompt = _build_user_prompt(obs, task_id)
-        completion = client.chat.completions.create(
-            model=model_name,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt},
-            ],
-            temperature=0.0,
-        )
-        action = _parse_llm_response((completion.choices[0].message.content or "").strip())
-        obs_obj, reward, done = env.step(action)
-        obs = obs_obj.__dict__
-        rewards.append(float(reward))
+        for _ in range(max_steps):
+            if done:
+                break
+            
+            try:
+                user_prompt = _build_user_prompt(obs, task_id)
+                completion = client.chat.completions.create(
+                    model=model_name,
+                    messages=[
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    temperature=0.0,
+                )
+                action = _parse_llm_response((completion.choices[0].message.content or "").strip())
+                obs_obj, reward, done = env.step(action)
+                obs = obs_obj.__dict__
+                
+                # Ensure reward is in valid range
+                reward = float(reward)
+                reward = min(1.0, max(0.0, reward))
+                rewards.append(reward)
+            except Exception as step_error:
+                # Log error but continue
+                rewards.append(0.0)
+                break
 
-    final = env.grader_result()
-    return {
-        "task_id": task_id,
-        "done": done,
-        "steps": len(rewards),
-        "rewards": [round(r, 2) for r in rewards],
-        "score": final["normalized_score"],
-        "grader": final,
-    }
+        final = env.grader_result()
+        return {
+            "task_id": task_id,
+            "done": done,
+            "steps": len(rewards),
+            "rewards": [round(r, 2) for r in rewards],
+            "score": final.get("normalized_score", 0.0),
+            "grader": final,
+        }
+    except Exception as e:
+        return {
+            "task_id": task_id,
+            "done": True,
+            "steps": 0,
+            "rewards": [],
+            "score": 0.0,
+            "grader": {"error": str(e)},
+        }
 
 
 @app.post("/reset")
 def reset(task_id: str = "easy"):
-    env = get_env()
-    obs = env.reset(task_id=task_id)
-    return {"observation": obs.__dict__}
+    """Reset endpoint with error handling."""
+    try:
+        env = get_env()
+        obs = env.reset(task_id=task_id)
+        return {"observation": obs.__dict__}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Reset failed: {str(e)}")
 
 
 @app.post("/step")
 def step(action: ActionRequest):
-    env = get_env()
-    act = EmailAction(action_type=action.action_type, value=action.value)
-    obs, reward, done = env.step(act)
-    return {"observation": obs.__dict__, "reward": reward, "done": done}
+    """Step endpoint with error handling."""
+    try:
+        env = get_env()
+        
+        # Validate action request
+        if not action.action_type:
+            raise HTTPException(status_code=400, detail="Missing action_type")
+        
+        act = EmailAction(action_type=action.action_type, value=action.value)
+        obs, reward, done = env.step(act)
+        
+        # Ensure reward is in valid range
+        reward = float(reward)
+        reward = min(1.0, max(0.0, reward))
+        
+        return {
+            "observation": obs.__dict__,
+            "reward": round(reward, 4),
+            "done": bool(done)
+        }
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Step failed: {str(e)}")
 
 
 @app.get("/state")
 def state():
-    env = get_env()
-    return env.state().__dict__
+    """State endpoint with error handling."""
+    try:
+        env = get_env()
+        return env.state().__dict__
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"State retrieval failed: {str(e)}")
 
 
 @app.get("/grader")
 def grader():
-    env = get_env()
-    return env.grader_result()
+    """Grader endpoint with error handling."""
+    try:
+        env = get_env()
+        return env.grader_result()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Grader retrieval failed: {str(e)}")
 
 
 @app.get("/tasks")
 def tasks():
-    task_payload = []
-    for task_id, task in TASKS.items():
-        task_payload.append(
-            {
-                "id": task_id,
-                "instructions": task.instructions,
-                "action_schema": {
-                    "action_type": "classify | prioritize | reply",
-                    "value": "string",
-                },
-            }
-        )
-    return {"tasks": task_payload}
+    """Tasks endpoint with error handling."""
+    try:
+        task_payload = []
+        for task_id, task in TASKS.items():
+            task_payload.append(
+                {
+                    "id": str(task_id),
+                    "instructions": str(task.instructions),
+                    "action_schema": {
+                        "action_type": "classify | prioritize | reply",
+                        "value": "string",
+                    },
+                }
+            )
+        return {"tasks": task_payload}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Tasks retrieval failed: {str(e)}")
 
 
 @app.post("/baseline")

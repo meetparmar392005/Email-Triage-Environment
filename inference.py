@@ -64,20 +64,38 @@ def log_end(success: bool, steps: int, score: float, rewards: list[float]) -> No
 
 
 def parse_response(text: str, fallback_task: str) -> EmailAction:
-    action_type = {
-        "easy": "classify",
-        "medium": "prioritize",
-        "hard": "reply",
-    }.get(fallback_task, "classify")
-    value = ""
+    """Parse LLM response with robust error handling."""
+    try:
+        action_type = {
+            "easy": "classify",
+            "medium": "prioritize",
+            "hard": "reply",
+        }.get(fallback_task, "classify")
+        value = ""
 
-    for line in (text or "").strip().splitlines():
-        if line.startswith("ACTION_TYPE:"):
-            action_type = line.split(":", 1)[1].strip().lower()
-        elif line.startswith("VALUE:"):
-            value = line.split(":", 1)[1].strip()
+        if not text:
+            return EmailAction(action_type=action_type, value=value)
+        
+        for line in str(text).strip().splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            if line.startswith("ACTION_TYPE:"):
+                parsed_type = line.split(":", 1)[1].strip().lower()
+                if parsed_type:  # Only update if non-empty
+                    action_type = parsed_type
+            elif line.startswith("VALUE:"):
+                value = line.split(":", 1)[1].strip()
 
-    return EmailAction(action_type=action_type, value=value)
+        return EmailAction(action_type=action_type, value=value)
+    except Exception as e:
+        # Return safe default on any error
+        default_type = {
+            "easy": "classify",
+            "medium": "prioritize",
+            "hard": "reply",
+        }.get(fallback_task, "classify")
+        return EmailAction(action_type=default_type, value="")
 
 
 def build_prompt(task_id: str, instructions: str, email: dict) -> str:
@@ -91,20 +109,32 @@ def build_prompt(task_id: str, instructions: str, email: dict) -> str:
 
 
 def get_action(client: OpenAI, task_id: str, instructions: str, email: dict) -> EmailAction:
-    prompt = build_prompt(task_id, instructions, email)
-    response = client.chat.completions.create(
-        model=MODEL_NAME,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": prompt},
-        ],
-        temperature=0.0,
-    )
-    raw = (response.choices[0].message.content or "").strip()
-    return parse_response(raw, fallback_task=task_id)
+    """Get action from LLM with error handling."""
+    try:
+        prompt = build_prompt(task_id, instructions, email)
+        response = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.0,
+            timeout=30.0,
+        )
+        raw = (response.choices[0].message.content or "").strip()
+        return parse_response(raw, fallback_task=task_id)
+    except Exception as e:
+        # Return safe default action on error
+        default_type = {
+            "easy": "classify",
+            "medium": "prioritize",
+            "hard": "reply",
+        }.get(task_id, "classify")
+        return EmailAction(action_type=default_type, value="")
 
 
 def run_task(client: OpenAI, env: EmailTriageEnv, task_id: str) -> dict:
+    """Run task with comprehensive error handling."""
     rewards: list[float] = []
     steps = 0
     done = False
@@ -117,15 +147,32 @@ def run_task(client: OpenAI, env: EmailTriageEnv, task_id: str) -> dict:
         for step in range(1, MAX_STEPS + 1):
             if done:
                 break
-            action = get_action(client, task_id, obs.instructions, obs.email)
-            action_str = f"{action.action_type}:{action.value}"
-            result = env.step(action)
-            reward = float(result.reward or 0.0)
-            done = bool(result.done)
-            rewards.append(reward)
-            steps = step
-            log_step(step=step, action=action_str, reward=reward, done=done, error=None)
-            obs = result.observation
+            
+            try:
+                action = get_action(client, task_id, obs.instructions, obs.email)
+                action_str = f"{action.action_type}:{action.value}"
+                result = env.step(action)
+                
+                # Ensure reward is in valid range
+                reward = float(result.reward or 0.0)
+                reward = min(1.0, max(0.0, reward))
+                
+                done = bool(result.done)
+                rewards.append(reward)
+                steps = step
+                log_step(step=step, action=action_str, reward=reward, done=done, error=None)
+                obs = result.observation
+            except Exception as step_exc:
+                error = str(step_exc)
+                log_step(
+                    step=step,
+                    action="error",
+                    reward=0.0,
+                    done=True,
+                    error=error,
+                )
+                done = True
+                break
     except Exception as exc:
         error = str(exc)
         log_step(
@@ -137,9 +184,16 @@ def run_task(client: OpenAI, env: EmailTriageEnv, task_id: str) -> dict:
         )
         done = True
 
+    # Ensure we have at least one reward
+    if not rewards:
+        rewards = [0.0]
+    
     total = sum(rewards)
     episode_steps = max(1, len(rewards))
-    score = min(max(total / float(episode_steps), 0.0), 1.0)
+    score = total / float(episode_steps)
+    # Ensure score is in valid range
+    score = min(1.0, max(0.0, score))
+    
     success = score >= SUCCESS_SCORE_THRESHOLD and error is None
     log_end(success=success, steps=steps, score=score, rewards=rewards)
 
@@ -147,18 +201,30 @@ def run_task(client: OpenAI, env: EmailTriageEnv, task_id: str) -> dict:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--base-url", default="http://localhost:7860")
-    args = parser.parse_args()
+    """Main function with error handling."""
+    try:
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--base-url", default="http://localhost:7860")
+        args = parser.parse_args()
 
-    if not HF_TOKEN:
-        raise RuntimeError("HF_TOKEN (or API_KEY) is required for inference.")
+        if not HF_TOKEN:
+            raise RuntimeError("HF_TOKEN (or API_KEY) is required for inference.")
+        
+        if not args.base_url:
+            raise ValueError("base_url cannot be empty")
 
-    openai_client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
+        openai_client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN, timeout=30.0)
 
-    with EmailTriageEnv(base_url=args.base_url) as env:
-        for task_id in TASKS:
-            run_task(openai_client, env, task_id)
+        with EmailTriageEnv(base_url=args.base_url) as env:
+            for task_id in TASKS:
+                try:
+                    run_task(openai_client, env, task_id)
+                except Exception as task_error:
+                    print(f"[ERROR] Task {task_id} failed: {str(task_error)}", flush=True)
+                    # Continue with next task
+    except Exception as e:
+        print(f"[FATAL] Inference failed: {str(e)}", flush=True)
+        raise
 
 
 if __name__ == "__main__":
