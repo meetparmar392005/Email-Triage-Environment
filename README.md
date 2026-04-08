@@ -1,3 +1,13 @@
+---
+title: Email Triage Environment
+emoji: 📧
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # Email Triage Environment
 
 A real-world AI evaluation environment for inbox handling workflows: spam detection, urgency prioritization, and reply drafting.
@@ -11,7 +21,7 @@ A real-world AI evaluation environment for inbox handling workflows: spam detect
 - [Repository Structure](#repository-structure)
 - [Quick Start](#quick-start)
 - [Step-by-Step Local Run](#step-by-step-local-run)
-- [Step-by-Step Testing](#step-by-step-testing)
+- [Step-by-Step Testing via Swagger UI](#step-by-step-testing-via-swagger-ui)
 - [Run Inference Baseline](#run-inference-baseline)
 - [Docker Usage](#docker-usage)
 - [Deployment Notes](#deployment-notes)
@@ -147,31 +157,203 @@ uvicorn email_triage_env.server.app:app --host 0.0.0.0 --port 7860
 ### 5) Open API docs
 Visit: `http://127.0.0.1:7860/docs`
 
-## Step-by-Step Testing
+## Step-by-Step Testing via Swagger UI
 
-### 1) Health check
-```bash
-curl http://127.0.0.1:7860/health
+After starting the uvicorn server, visit `http://127.0.0.1:7860/docs` to access the interactive Swagger UI. Follow these steps to validate the project:
+
+### Phase 1: Explore Available Tasks
+
+**Step 1: Get List of Available Tasks**
+1. Click on **`GET /tasks`** endpoint in Swagger UI
+2. Click **"Try it out"** button
+3. Click **"Execute"**
+4. Review the response showing all 3 task definitions:
+   - `easy`: Classify emails as `spam` or `not_spam`
+   - `medium`: Assign urgency level (`critical`, `high`, `medium`, `low`)
+   - `hard`: Draft a professional reply to the email
+
+**Expected Response:**
+```json
+{
+  "tasks": [
+    {
+      "id": "easy",
+      "instructions": "Classify the email...",
+      "action_schema": {
+        "action_type": "classify | prioritize | reply",
+        "value": "string"
+      }
+    },
+    ...
+  ]
+}
 ```
 
-### 2) Reset episode
-```bash
-curl -X POST "http://127.0.0.1:7860/reset?task_id=easy"
-```
+### Phase 2: Test Easy Task (Classification)
 
-### 3) Take action
-```bash
-curl -X POST "http://127.0.0.1:7860/step" \
-  -H "Content-Type: application/json" \
-  -d "{\"action_type\":\"classify\",\"value\":\"spam\"}"
-```
+**Step 2: Reset with Easy Task**
+1. Click on **`POST /reset`** endpoint
+2. Click **"Try it out"**
+3. In the `task_id` parameter field, enter: `easy`
+4. Click **"Execute"**
+5. Note the observation object containing:
+   - `task_id`: "easy"
+   - `email`: Object with `sender`, `subject`, `body`
+   - `instructions`: Task instructions
+   - `step_num`: Current step (should be 0)
 
-### 4) Inspect state and grader
-```bash
-curl http://127.0.0.1:7860/state
-curl http://127.0.0.1:7860/grader
-curl http://127.0.0.1:7860/tasks
+**Step 3: Submit Classification Action**
+1. Click on **`POST /step`** endpoint
+2. Click **"Try it out"**
+3. In the request body, enter:
+```json
+{
+  "action_type": "classify",
+  "value": "spam"
+}
 ```
+4. Click **"Execute"**
+5. Verify response contains:
+   - `observation`: Updated observation object
+   - `reward`: Should be 1.0 if correct, 0.2 if incorrect, or 0.0 for wrong action type
+   - `done`: Boolean indicating if episode is complete
+
+**Step 4: Check Final State and Grader Result**
+1. Click on **`GET /state`** endpoint
+2. Click **"Try it out"** → **"Execute"**
+3. Verify state shows:
+   - `task_id`: "easy"
+   - `step_num`: Current step count
+   - `done`: Whether task is complete
+   - `cumulative_score`: Total reward accumulated
+
+4. Click on **`GET /grader`** endpoint
+5. Click **"Try it out"** → **"Execute"**
+6. Review grader result containing:
+   - Correctness metrics
+   - Feedback on classification
+   - `normalized_score`: Final normalized score
+
+### Phase 3: Test Medium Task (Prioritization)
+
+**Step 5: Reset with Medium Task**
+1. Click on **`POST /reset`**
+2. Enter `task_id`: `medium`
+3. Execute and review the new email
+4. Note the instructions asking to assign urgency level
+
+**Step 6: Submit Prioritization Action**
+1. Click on **`POST /step`**
+2. Enter request body:
+```json
+{
+  "action_type": "prioritize",
+  "value": "critical"
+}
+```
+3. Execute and verify reward (1.0 for exact match, partial credit for close levels)
+4. Copy the observation for reference
+
+**Step 7: Verify Grader Feedback**
+1. Click **`GET /grader`**
+2. Review the grader result for:
+   - Priority level correctness
+   - Partial credit scoring logic
+   - Detailed feedback
+
+### Phase 4: Test Hard Task (Reply Generation)
+
+**Step 8: Reset with Hard Task**
+1. Click on **`POST /reset`**
+2. Enter `task_id`: `hard`
+3. Execute and note this task requires composing a reply
+
+**Step 9: Submit Reply Action**
+1. Click on **`POST /step`**
+2. Enter request body:
+```json
+{
+  "action_type": "reply",
+  "value": "Thank you for your message. I have received your inquiry about [topic] and will provide a detailed response by end of business day."
+}
+```
+3. Execute and verify reward (composite score from relevance, structure, tone, substance)
+
+**Step 10: Check Advanced Grader Metrics**
+1. Click **`GET /grader`**
+2. Review compositional scoring for:
+   - Relevance: Does reply address the email?
+   - Structure: Is it well-organized?
+   - Tone: Is it professional?
+   - Substance: Does it provide actionable value?
+
+### Phase 5: System Health & Configuration
+
+**Step 11: Health Check**
+1. Click on **`GET /health`** endpoint
+2. Click **"Try it out"** → **"Execute"**
+3. Verify the server responds with status 200 (healthy)
+
+**Step 12: Reset for Next Episode**
+1. Click on **`POST /reset`**
+2. Choose a `task_id` parameter
+3. Click **"Execute"** to start a fresh episode
+4. This clears the previous state and provides a new email
+
+### Phase 6: Complete Multi-Step Episode Testing
+
+**Step 13: Complete Easy Task Episode**
+1. Reset with `task_id=easy`
+2. Submit 1 step with correct classification
+3. Verify `done=true` in response (episode is complete on perfect score)
+4. Check `/grader` for final normalized_score
+
+**Step 14: Complete Medium Task Episode (Up to 5 Steps)**
+1. Reset with `task_id=medium`
+2. Submit step 1: First action
+3. If `done=false`, submit step 2: Refine action
+4. Continue until either:
+   - `done=true` (achieved perfect score)
+   - Reach `MAX_STEPS` limit
+5. Verify final cumulative rewards and grader feedback
+
+**Step 15: Complete Hard Task Episode**
+1. Reset with `task_id=hard`
+2. Submit a thoughtful reply with context
+3. Check reward score for compositional feedback
+4. If `done=false`, refine the reply based on grader feedback
+5. Continue until task completes or MAX_STEPS reached
+
+### Phase 7: Error Handling & Edge Cases
+
+**Step 16: Test Invalid Action Type**
+1. Reset with `task_id=easy`
+2. Submit step with invalid action_type (e.g., "invalid_action")
+3. Verify proper error handling in response (should get 0.0 reward)
+
+**Step 17: Test Invalid Values**
+1. Reset with `task_id=medium`
+2. Submit prioritize action with invalid priority (e.g., "urgent" instead of valid options)
+3. Verify grader marks as invalid (0.1 reward)
+
+**Step 18: Test Multiple Resets**
+1. Reset with `task_id=easy`
+2. Note the email content
+3. Reset again with `task_id=easy`
+4. Verify different email is presented (demonstrates data randomization)
+
+### Summary Validation Checklist
+
+- ✅ /tasks endpoint returns all task definitions correctly
+- ✅ /reset endpoint initializes episodes with valid emails
+- ✅ /step endpoint processes actions and returns rewards
+- ✅ /state endpoint reflects current episode state
+- ✅ /grader endpoint provides accurate scoring feedback
+- ✅ Scores range from 0.0 to 1.0
+- ✅ `done` flag properly signals episode completion
+- ✅ Multiple episodes can be run sequentially
+- ✅ Error handling returns appropriate responses
+- ✅ All endpoints are documented and functional
 
 ## Run Inference Baseline
 
