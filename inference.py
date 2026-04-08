@@ -48,7 +48,7 @@ def log_start(task: str, env: str, model: str) -> None:
 
 def log_step(step: int, action: str, reward: float, done: bool, error: Optional[str]) -> None:
     error_value = _normalize_text(error) if error else "null"
-    action_value = _normalize_text(action)
+    action_value = _normalize_text(action).replace("\n", " ")
     print(
         f"[STEP] step={step} action={action_value} reward={reward:.2f} done={str(done).lower()} error={error_value}",
         flush=True,

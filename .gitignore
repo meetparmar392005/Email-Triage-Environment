@@ -38,3 +38,10 @@ logs/
 
 # documantation folder
 documentation
+EXECUTIVE_SUMMARY.md
+FINAL_AUDIT_100_PERCENT.md
+PHASE2_CHECKLIST.md
+PHASE2_READY.md
+SUBMIT_NOW.md
+TROUBLESHOOTING.md
+verify.py

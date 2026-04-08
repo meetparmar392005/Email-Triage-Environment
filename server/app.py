@@ -10,7 +10,12 @@ from .email_environment import EmailEnvironment
 from .tasks import TASKS
 
 app = FastAPI(title="Email Triage Environment")
-env = EmailEnvironment()
+
+# Create a new environment instance for each request to avoid state conflicts
+def get_env():
+    if not hasattr(app.state, "env"):
+        app.state.env = EmailEnvironment()
+    return app.state.env
 
 
 class ActionRequest(BaseModel):
@@ -53,6 +58,7 @@ def _build_user_prompt(observation: dict[str, Any], task_id: str) -> str:
 
 
 def _run_baseline_episode(client: OpenAI, model_name: str, task_id: str, max_steps: int = 5) -> dict:
+    env = get_env()
     obs = env.reset(task_id=task_id).__dict__
     rewards: list[float] = []
     done = False
@@ -87,12 +93,14 @@ def _run_baseline_episode(client: OpenAI, model_name: str, task_id: str, max_ste
 
 @app.post("/reset")
 def reset(task_id: str = "easy"):
+    env = get_env()
     obs = env.reset(task_id=task_id)
     return {"observation": obs.__dict__}
 
 
 @app.post("/step")
 def step(action: ActionRequest):
+    env = get_env()
     act = EmailAction(action_type=action.action_type, value=action.value)
     obs, reward, done = env.step(act)
     return {"observation": obs.__dict__, "reward": reward, "done": done}
@@ -100,11 +108,13 @@ def step(action: ActionRequest):
 
 @app.get("/state")
 def state():
+    env = get_env()
     return env.state().__dict__
 
 
 @app.get("/grader")
 def grader():
+    env = get_env()
     return env.grader_result()
 
 
@@ -133,7 +143,7 @@ def baseline(request: BaselineRequest):
 
     api_base_url = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
     model_name = request.model or os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
-    max_steps = max(1, min(request.max_steps, env.MAX_STEPS))
+    max_steps = max(1, min(request.max_steps, EmailEnvironment.MAX_STEPS))
 
     try:
         client = OpenAI(base_url=api_base_url, api_key=api_key)

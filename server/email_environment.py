@@ -1,10 +1,8 @@
-class Environment:
-    pass
 from email_triage_env.models import EmailAction, EmailObservation, EmailState
 from .tasks import TASKS
 
 
-class EmailEnvironment(Environment):
+class EmailEnvironment:
     MAX_STEPS = 5
 
     def __init__(self):
