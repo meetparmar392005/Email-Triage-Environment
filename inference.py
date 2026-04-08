@@ -22,7 +22,9 @@ from email_triage_env import EmailAction, EmailTriageEnv
 
 API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
-HF_TOKEN = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
+# HF_TOKEN = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
+HF_TOKEN = "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"
+
 LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
 
 TASKS = ["easy", "medium", "hard"]
@@ -136,7 +138,8 @@ def run_task(client: OpenAI, env: EmailTriageEnv, task_id: str) -> dict:
         done = True
 
     total = sum(rewards)
-    score = min(max(total / float(MAX_STEPS), 0.0), 1.0)
+    episode_steps = max(1, len(rewards))
+    score = min(max(total / float(episode_steps), 0.0), 1.0)
     success = score >= SUCCESS_SCORE_THRESHOLD and error is None
     log_end(success=success, steps=steps, score=score, rewards=rewards)
 

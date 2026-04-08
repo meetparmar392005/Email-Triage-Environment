@@ -3,14 +3,90 @@ import random
 # ── Email corpus ──────────────────────────────────────────────────────────────
 
 EMAILS = {
+    "spam": [
+        {
+            "subject": "You've won $1,000,000!",
+            "sender": "lucky@prize-winner.biz",
+            "body": "Click here to claim your prize now! Limited time offer!",
+            "timestamp": "2024-01-15T09:00:00",
+        },
+        {
+            "subject": "Enlarge your profits NOW",
+            "sender": "deals@spammy.xyz",
+            "body": "Buy our miracle supplement and triple your income in 30 days!",
+            "timestamp": "2024-01-15T09:05:00",
+        },
+        {
+            "subject": "URGENT: Account suspended",
+            "sender": "security@paypa1.fake",
+            "body": "Your PayPal account is suspended. Verify now at http://phish.biz",
+            "timestamp": "2024-01-15T09:10:00",
+        },
+    ],
+    "legit": [
+        {
+            "subject": "Q3 report attached",
+            "sender": "alice@company.com",
+            "body": "Hi team, please find the Q3 financial report attached. Review before Friday's meeting.",
+            "timestamp": "2024-01-15T10:00:00",
+        },
+        {
+            "subject": "Interview scheduled for Tuesday",
+            "sender": "hr@acme.com",
+            "body": "Your interview is confirmed for Tuesday at 2pm. Please bring your portfolio.",
+            "timestamp": "2024-01-15T10:15:00",
+        },
+        {
+            "subject": "Bug report: login page broken",
+            "sender": "bob@company.com",
+            "body": "The login page returns a 500 error on Safari. Logs attached. Urgent fix needed.",
+            "timestamp": "2024-01-15T11:00:00",
+        },
+    ],
+    "mixed_priority": [
+        {
+            "subject": "Team lunch tomorrow",
+            "sender": "carol@company.com",
+            "body": "Just a reminder, team lunch is tomorrow at noon at the usual place.",
+            "timestamp": "2024-01-15T12:00:00",
+            "expected_priority": "low",
+        },
+        {
+            "subject": "Server is down - production!",
+            "sender": "alerts@monitoring.io",
+            "body": "CRITICAL: Production server CPU at 100%, 503 errors spiking. Immediate attention required.",
+            "timestamp": "2024-01-15T13:00:00",
+            "expected_priority": "critical",
+        },
+        {
+            "subject": "Please review my PR",
+            "sender": "dave@company.com",
+            "body": "Hi, I've opened a PR for the new user auth feature. Review when you get a chance.",
+            "timestamp": "2024-01-15T14:00:00",
+            "expected_priority": "medium",
+        },
+        {
+            "subject": "Invoice #4521 due in 3 days",
+            "sender": "billing@vendor.com",
+            "body": "Your invoice of $4,200 is due on Friday. Please process payment to avoid late fees.",
+            "timestamp": "2024-01-15T15:00:00",
+            "expected_priority": "high",
+        },
+    ],
     "reply_needed": [
         {
-            "subject": "Request for leave",
-            "sender": "john.doe@company.com",
-            "body": "Dear Dhruval Patel, I am writing to request a leave of absence from 4th April 2026 to 18th April 2026. I have a personal matter that I need to attend to during this time. I will ensure that all my tasks are completed before I go and make necessary arrangements for coverage while I'm away. If there's any issue with my request, please let me know as soon as possible. Thank you for your understanding.",
+            "subject": "Can we reschedule our meeting?",
+            "sender": "eve@partner.com",
+            "body": "Hi, I have a conflict on Thursday at 3pm. Could we move to Friday same time or Monday at 10am?",
+            "timestamp": "2024-01-15T16:00:00",
+        },
+        {
+            "subject": "Feedback on your proposal",
+            "sender": "frank@client.com",
+            "body": "Thanks for the proposal. We like the direction but have two concerns: timeline seems tight and we'd need dedicated support. Can you address these?",
             "timestamp": "2024-01-15T17:00:00",
         },
-    ]
+    ],
 }
 
 SPAM_DOMAINS = {"prize-winner.biz", "spammy.xyz", "paypa1.fake"}
