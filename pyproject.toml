@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [project.scripts]
-email-triage-server = "server.app:app"
+email-triage-server = "server.app:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

@@ -35,3 +35,6 @@ logs/
 
 # HuggingFace cache
 .cache/
+
+# documantation folder
+documentation
