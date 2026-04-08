@@ -98,14 +98,16 @@ Interactive docs:
 
 ```text
 .
+├── server/
+│   ├── app.py                     # FastAPI endpoints
+│   ├── email_environment.py       # Core env logic: reset/step/state
+│   ├── tasks.py                   # Email pools + graders
+│   ├── __init__.py                # Server package marker
+│   └── Dockerfile                 # Server Docker build
 ├── email_triage_env/
+│   ├── __init__.py                # Package exports
 │   ├── models.py                  # Action/Observation/State models
-│   ├── client.py                  # HTTP client wrapper
-│   └── server/
-│       ├── app.py                 # FastAPI endpoints
-│       ├── email_environment.py   # Core env logic: reset/step/state
-│       ├── tasks.py               # Email pools + graders
-│       └── Dockerfile             # Server Docker build
+│   └── client.py                  # HTTP client wrapper
 ├── inference.py                   # Required Round 1 baseline runner
 ├── baseline.py                    # Compatibility shim to inference.py
 ├── openenv.yaml                   # Environment metadata + tasks
@@ -117,7 +119,7 @@ Interactive docs:
 
 ```bash
 pip install -e .
-uvicorn email_triage_env.server.app:app --host 0.0.0.0 --port 7860
+uvicorn server.app:app --host 0.0.0.0 --port 7860
 python inference.py --base-url http://localhost:7860
 ```
 
@@ -151,7 +153,7 @@ pip install -e .
 
 ### 4) Start API server
 ```bash
-uvicorn email_triage_env.server.app:app --host 0.0.0.0 --port 7860
+uvicorn server.app:app --host 0.0.0.0 --port 7860
 ```
 
 ### 5) Open API docs

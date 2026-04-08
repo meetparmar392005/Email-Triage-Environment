@@ -1,6 +1,6 @@
 class Environment:
     pass
-from ..models import EmailAction, EmailObservation, EmailState
+from email_triage_env.models import EmailAction, EmailObservation, EmailState
 from .tasks import TASKS
 
 
