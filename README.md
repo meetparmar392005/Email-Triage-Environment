@@ -210,19 +210,6 @@ Then test:
 curl http://127.0.0.1:7860/health
 ```
 
-## Deployment Notes
-
-For Round 1 style submission:
-- keep `inference.py` at repo root
-- keep valid `openenv.yaml`
-- ensure Dockerfile builds cleanly
-- expose and verify required endpoints
-
-Recommended pre-submit checks:
-- `python -m compileall email_triage_env inference.py`
-- endpoint smoke tests (`/health`, `/reset`, `/step`, `/tasks`, `/grader`)
-- Docker build/run locally
-
 ## What Can Be Added Next
 
 To evolve this into a deploy-ready AI email employee:
