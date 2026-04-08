@@ -1,171 +1,253 @@
-# Email-Triage-Environment
+# Email Triage Environment
 
-Email triage is a real-world, high-impact workflow. Knowledge workers spend a large fraction of their week managing inboxes, and poor triage causes missed deadlines, delayed responses, and avoidable operational risk.
+A real-world AI evaluation environment for inbox handling workflows: spam detection, urgency prioritization, and reply drafting.
 
-This environment trains/evaluates agents on a realistic triage pipeline:
-- Easy: classify spam vs non-spam.
-- Medium: prioritize urgency by business impact.
-- Hard: draft a professional, relevant email reply.
+## Index
+- [What This Repository Is](#what-this-repository-is)
+- [Why This Matters](#why-this-matters)
+- [What It Does](#what-it-does)
+- [How Scoring Works](#how-scoring-works)
+- [Environment API](#environment-api)
+- [Repository Structure](#repository-structure)
+- [Quick Start](#quick-start)
+- [Step-by-Step Local Run](#step-by-step-local-run)
+- [Step-by-Step Testing](#step-by-step-testing)
+- [Run Inference Baseline](#run-inference-baseline)
+- [Docker Usage](#docker-usage)
+- [Deployment Notes](#deployment-notes)
+- [What Can Be Added Next](#what-can-be-added-next)
+- [Practical Use Cases](#practical-use-cases)
+- [Troubleshooting](#troubleshooting)
 
-This is intentionally not a toy benchmark. It models practical communication tasks that teams run every day.
+## What This Repository Is
 
-## Problem Motivation
+This repo implements an **email triage simulation environment** where AI agents can be evaluated and improved on realistic tasks using `reset()` / `step()` / `state()` flow.
 
-Inbox overload is a measurable productivity drain (often cited at roughly 28% of workweek spent on email handling). Good triage requires:
-- Fast pattern recognition (spam signals).
-- Context-aware risk assessment (urgency and business priority).
-- High-quality natural language generation (professional replies).
+Instead of a toy game, the environment models an operational workflow teams actually perform daily:
+- detect spam
+- identify urgent emails
+- draft useful replies
 
-These tasks create a natural easy -> medium -> hard curriculum for agent development.
+## Why This Matters
 
-## Task Design
+Email overload is a practical business problem. A good AI assistant should:
+- classify reliably
+- prioritize based on impact
+- reply with context and professional tone
 
-The environment exposes 3 tasks with deterministic graders:
-- `easy`: classify each email as `spam` or `not_spam`.
-- `medium`: assign one of `critical`, `high`, `medium`, `low`.
-- `hard`: produce a professional reply to the sender.
+This repository gives you a measurable, repeatable benchmark to test those capabilities.
 
-Task data and graders are implemented in `email_triage_env/server/tasks.py`.
+## What It Does
 
-## Observation Space
+The environment includes 3 tasks with increasing difficulty:
+- `easy`: classify `spam` vs `not_spam`
+- `medium`: assign urgency `critical|high|medium|low`
+- `hard`: draft a contextual professional reply
 
-Exact fields from `email_triage_env/models.py`:
+Data and task graders are defined in `email_triage_env/server/tasks.py`.
 
-| Field | Type | Description |
-|---|---|---|
-| `task_id` | `str` | Current task identifier (`easy`, `medium`, `hard`) |
-| `email` | `dict` | Current email payload (`sender`, `subject`, `body`, etc.) |
-| `history` | `list` | Per-step grading trace and prior actions |
-| `step_num` | `int` | Current step index in episode |
-| `instructions` | `str` | Task-specific instruction shown to the agent |
+## How Scoring Works
 
-## Action Space
+Each `step` returns reward between `0.0` and `1.0`. Final inference score is computed from step rewards in `inference.py`.
 
-Exact fields from `email_triage_env/models.py`:
+Grader behavior:
+- Easy:
+  - `1.0` for correct class
+  - `0.2` for wrong class
+  - `0.0` for wrong action type
+- Medium:
+  - `1.0` exact match
+  - partial credit for close priority levels
+  - `0.1` for invalid label
+- Hard:
+  - compositional score from relevance, structure, tone, and substance
 
-| Field | Type | Description |
-|---|---|---|
-| `action_type` | `str` | Expected value depends on task: `classify`, `prioritize`, `reply` |
-| `value` | `str` | Agent answer, priority label, or reply text |
+Episode ends when:
+- perfect score on step (`1.0`), or
+- `MAX_STEPS` reached.
 
-## State Space
-
-Exact fields from `email_triage_env/models.py`:
-
-| Field | Type | Description |
-|---|---|---|
-| `task_id` | `str` | Active task id |
-| `step_num` | `int` | Number of executed steps |
-| `done` | `bool` | Episode termination flag |
-| `cumulative_score` | `float` | Sum of step rewards accumulated so far |
-
-## Reward Design
-
-Reward is dense and task-aware (0.0 to 1.0 per step), not binary-only terminal reward.
-
-- Easy (`grade_classify`):
-  - `1.0` if spam/legit classification is correct.
-  - `0.2` on wrong class (still gives corrective signal).
-  - `0.0` for wrong action type.
-- Medium (`grade_prioritize`):
-  - `1.0` exact priority match.
-  - Partial credit based on label distance (`critical` <-> `low` gets less than `high` <-> `critical`).
-  - `0.1` for invalid priority label.
-- Hard (`grade_reply`):
-  - Compositional scoring based on usefulness signals:
-    - minimum length,
-    - acknowledgment/greeting tone,
-    - topic overlap with sender request,
-    - substantive (non-vague) content.
-
-Episode ends when either:
-- perfect step score (`1.0`) is reached, or
-- `MAX_STEPS` (`5`) is reached.
-
-### Partial Progress Example
-
-For a medium-priority email where expected label is `critical`:
-- Step 1 agent outputs `medium` -> reward around `0.2`
-- Step 2 agent outputs `high` -> reward around `0.6`
-- Step 3 agent outputs `critical` -> reward `1.0`, episode terminates
-
-The agent receives directional feedback each step, enabling learning from trajectory quality.
-
-## API Endpoints
+## Environment API
 
 Core endpoints:
 - `POST /reset?task_id=<easy|medium|hard>`
 - `POST /step`
 - `GET /state`
 
-Round 1 required helper endpoints:
-- `GET /tasks`: task list plus action schema
-- `GET /grader`: latest grader output (includes normalized score in `[0,1]`)
-- `POST /baseline`: runs baseline inference for all 3 tasks using OpenAI-compatible API
+Round 1 helper endpoints:
+- `GET /tasks`
+- `GET /grader`
+- `POST /baseline`
 
 Health:
 - `GET /health`
 
-## Local Setup
-
-### 1) Install
-
-```bash
-pip install -e .
-```
-
-### 2) Run server
-
-```bash
-uvicorn email_triage_env.server.app:app --host 0.0.0.0 --port 7860
-```
-
-### 3) Run required inference script
-
-Set env vars first:
-- `HF_TOKEN` (or `API_KEY`) required
-- `API_BASE_URL` optional (default provided)
-- `MODEL_NAME` optional (default provided)
-- `LOCAL_IMAGE_NAME` optional placeholder for checklist compatibility
-
-```bash
-python inference.py --base-url http://localhost:7860
-```
-
-### 4) Docker
-
-```bash
-docker build -t email-triage-env:latest .
-docker run --rm -p 7860:7860 email-triage-env:latest
-```
-
-## Baseline Scores (Reference)
-
-Illustrative baseline run with `gpt-4o-mini`:
-
-| Task | Expected baseline behavior | Typical normalized score |
-|---|---|---|
-| Easy (spam) | Usually near-perfect on known spam patterns | `0.90-1.00` |
-| Medium (priority) | Good but sometimes underestimates urgency | `0.60-0.80` |
-| Hard (reply) | Often generic; misses detailed constraints | `0.35-0.60` |
-
-This pattern is intentional: spam classification is easiest, reply drafting is hardest.
+Interactive docs:
+- `/docs` (Swagger UI)
 
 ## Repository Structure
 
 ```text
 .
 ├── email_triage_env/
-│   ├── models.py
-│   ├── client.py
+│   ├── models.py                  # Action/Observation/State models
+│   ├── client.py                  # HTTP client wrapper
 │   └── server/
-│       ├── app.py
-│       ├── email_environment.py
-│       ├── tasks.py
-│       └── Dockerfile
-├── inference.py
-├── baseline.py
-├── openenv.yaml
-├── pyproject.toml
-└── Dockerfile
+│       ├── app.py                 # FastAPI endpoints
+│       ├── email_environment.py   # Core env logic: reset/step/state
+│       ├── tasks.py               # Email pools + graders
+│       └── Dockerfile             # Server Docker build
+├── inference.py                   # Required Round 1 baseline runner
+├── baseline.py                    # Compatibility shim to inference.py
+├── openenv.yaml                   # Environment metadata + tasks
+├── pyproject.toml                 # Project dependencies
+└── Dockerfile                     # Root Dockerfile for deployment/validation
 ```
+
+## Quick Start
+
+```bash
+pip install -e .
+uvicorn email_triage_env.server.app:app --host 0.0.0.0 --port 7860
+python inference.py --base-url http://localhost:7860
+```
+
+## Step-by-Step Local Run
+
+### 1) Clone and enter repo
+```bash
+git clone <your-repo-url>
+cd Email-Triage-Environment
+```
+
+### 2) Create virtual environment
+
+Windows (PowerShell):
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
+
+Mac/Linux:
+```bash
+python -m venv .venv
+source .venv/bin/activate
+```
+
+### 3) Install dependencies
+```bash
+python -m pip install --upgrade pip
+pip install -e .
+```
+
+### 4) Start API server
+```bash
+uvicorn email_triage_env.server.app:app --host 0.0.0.0 --port 7860
+```
+
+### 5) Open API docs
+Visit: `http://127.0.0.1:7860/docs`
+
+## Step-by-Step Testing
+
+### 1) Health check
+```bash
+curl http://127.0.0.1:7860/health
+```
+
+### 2) Reset episode
+```bash
+curl -X POST "http://127.0.0.1:7860/reset?task_id=easy"
+```
+
+### 3) Take action
+```bash
+curl -X POST "http://127.0.0.1:7860/step" \
+  -H "Content-Type: application/json" \
+  -d "{\"action_type\":\"classify\",\"value\":\"spam\"}"
+```
+
+### 4) Inspect state and grader
+```bash
+curl http://127.0.0.1:7860/state
+curl http://127.0.0.1:7860/grader
+curl http://127.0.0.1:7860/tasks
+```
+
+## Run Inference Baseline
+
+Set variables first:
+- `HF_TOKEN` (required, do not hardcode into files)
+- `API_BASE_URL` (optional, has default)
+- `MODEL_NAME` (optional, has default)
+
+Example:
+```bash
+export HF_TOKEN=your_token_here
+export API_BASE_URL=https://router.huggingface.co/v1
+export MODEL_NAME=Qwen/Qwen2.5-72B-Instruct
+python inference.py --base-url http://localhost:7860
+```
+
+Expected logs:
+- `[START] ...`
+- `[STEP] ...`
+- `[END] ...`
+
+## Docker Usage
+
+### Build
+```bash
+docker build -t email-triage-env:latest .
+```
+
+### Run
+```bash
+docker run --rm -p 7860:7860 email-triage-env:latest
+```
+
+Then test:
+```bash
+curl http://127.0.0.1:7860/health
+```
+
+## Deployment Notes
+
+For Round 1 style submission:
+- keep `inference.py` at repo root
+- keep valid `openenv.yaml`
+- ensure Dockerfile builds cleanly
+- expose and verify required endpoints
+
+Recommended pre-submit checks:
+- `python -m compileall email_triage_env inference.py`
+- endpoint smoke tests (`/health`, `/reset`, `/step`, `/tasks`, `/grader`)
+- Docker build/run locally
+
+## What Can Be Added Next
+
+To evolve this into a deploy-ready AI email employee:
+- Inbox connectors: Gmail/Outlook API ingestion
+- Confidence + human-in-loop review queue
+- CRM/ticket context retrieval before drafting replies
+- Policy filters (PII, compliance, prompt injection defense)
+- Multi-model routing (cheap classifier + stronger reply model)
+- Monitoring: false-positive spam, urgent miss rate, override rate, latency, cost
+- Persistent datastore for audit trails and feedback loops
+
+## Practical Use Cases
+
+- Evaluate different LLMs on realistic email workflows
+- Track model quality regressions after prompt changes
+- Prototype agent pipelines before production rollout
+- Build RL/agentic training loops with partial-credit rewards
+
+## Troubleshooting
+
+- `openenv validate` not found:
+  - install the required OpenEnv CLI/core in your environment.
+- Docker build fails:
+  - ensure Docker Desktop/daemon is running.
+- `/baseline` returns missing token error:
+  - set `HF_TOKEN` (or `API_KEY`) in shell environment.
+- Unexpected poor score:
+  - inspect `/grader` output and `history` reasons for step-level feedback.
