@@ -1,3 +1,17 @@
+---
+title: Email Triage Environment
+emoji: 📧
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 7860
+pinned: false
+tags:
+  - openenv
+  - email
+  - triage
+---
+
 # Email Triage Environment
 
 A real-world AI evaluation environment for inbox handling workflows: spam detection, urgency prioritization, and reply drafting.
