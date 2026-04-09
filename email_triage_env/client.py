@@ -59,9 +59,9 @@ class EmailTriageEnv:
             if "observation" not in data or "reward" not in data or "done" not in data:
                 raise ValueError("Invalid response: missing required fields")
             
-            # Ensure reward is in valid range
+            # Ensure reward is in valid range (0.01, 0.99) - STRICTLY between 0 and 1
             reward = float(data["reward"])
-            reward = min(1.0, max(0.0, reward))
+            reward = min(0.99, max(0.01, reward))
             
             return StepResult(
                 observation=EmailObservation(**data["observation"]),

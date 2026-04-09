@@ -153,9 +153,9 @@ def run_task(client: OpenAI, env: EmailTriageEnv, task_id: str) -> dict:
                 action_str = f"{action.action_type}:{action.value}"
                 result = env.step(action)
                 
-                # Ensure reward is in valid range
-                reward = float(result.reward or 0.0)
-                reward = min(1.0, max(0.0, reward))
+                # Ensure reward is in valid range (0.01, 0.99) - STRICTLY between 0 and 1
+                reward = float(result.reward or 0.01)
+                reward = min(0.99, max(0.01, reward))
                 
                 done = bool(result.done)
                 rewards.append(reward)
@@ -186,13 +186,13 @@ def run_task(client: OpenAI, env: EmailTriageEnv, task_id: str) -> dict:
 
     # Ensure we have at least one reward
     if not rewards:
-        rewards = [0.0]
+        rewards = [0.01]
     
     total = sum(rewards)
     episode_steps = max(1, len(rewards))
     score = total / float(episode_steps)
-    # Ensure score is in valid range
-    score = min(1.0, max(0.0, score))
+    # Ensure score is in valid range (0.01, 0.99) - STRICTLY between 0 and 1
+    score = min(0.99, max(0.01, score))
     
     success = score >= SUCCESS_SCORE_THRESHOLD and error is None
     log_end(success=success, steps=steps, score=score, rewards=rewards)

@@ -75,9 +75,9 @@ class EmailEnvironment:
             
             score, reason = task.grade(action, self._email)
             
-            # Ensure score is in valid range
+            # Ensure score is in valid range (0.01, 0.99) - STRICTLY between 0 and 1
             score = float(score)
-            score = min(1.0, max(0.0, score))
+            score = min(0.99, max(0.01, score))
 
             # Update state
             self._step_num += 1
@@ -95,8 +95,8 @@ class EmailEnvironment:
                 "reason": str(reason),
             })
 
-            # Episode ends on a perfect score OR hitting max steps
-            done = (score >= 0.999) or (self._step_num >= self.MAX_STEPS)
+            # Episode ends on a near-perfect score OR hitting max steps
+            done = (score >= 0.95) or (self._step_num >= self.MAX_STEPS)
             self._done = done
 
             obs = EmailObservation(
@@ -147,8 +147,9 @@ class EmailEnvironment:
             cumulative = float(self._cumulative_score)
             
             # Normalized score = average reward per step taken
+            # Ensure it's strictly between 0 and 1
             normalized = cumulative / float(actual_steps)
-            normalized = min(1.0, max(0.0, normalized))
+            normalized = min(0.99, max(0.01, normalized))
             
             return {
                 "task_id": str(self._task_id),

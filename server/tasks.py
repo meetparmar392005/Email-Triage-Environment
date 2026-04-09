@@ -100,33 +100,33 @@ def grade_classify(action, email) -> tuple:
     try:
         # Validate action type
         if not hasattr(action, 'action_type') or action.action_type != "classify":
-            return 0.0, f"Wrong action_type '{getattr(action, 'action_type', 'None')}', expected 'classify'"
+            return 0.01, f"Wrong action_type '{getattr(action, 'action_type', 'None')}', expected 'classify'"
 
         # Validate action value
         if not hasattr(action, 'value') or action.value is None:
-            return 0.0, "Missing action value"
+            return 0.01, "Missing action value"
         
         answer = str(action.value).lower().strip()
         if not answer:
-            return 0.0, "Empty action value"
+            return 0.01, "Empty action value"
         
         # Safely extract domain
         sender = email.get("sender", "")
         if not sender or "@" not in sender:
-            return 0.0, "Invalid email sender format"
+            return 0.01, "Invalid email sender format"
         
         domain = sender.split("@")[-1]
         is_spam = domain in SPAM_DOMAINS
     except Exception as e:
-        return 0.0, f"Error processing classification: {str(e)}"
+        return 0.01, f"Error processing classification: {str(e)}"
 
     spam_words = {"spam", "junk", "phishing", "scam", "fraudulent"}
     legit_words = {"not_spam", "not spam", "legitimate", "ham", "legit", "real"}
 
     if is_spam and any(w in answer for w in spam_words):
-        return 1.0, "Correct: spam identified"
+        return 0.95, "Correct: spam identified"
     if not is_spam and any(w in answer for w in legit_words):
-        return 1.0, "Correct: legitimate email identified"
+        return 0.95, "Correct: legitimate email identified"
 
     correct = "spam" if is_spam else "not_spam"
     return 0.2, f"Incorrect. Expected '{correct}', got '{answer}'"
@@ -137,28 +137,28 @@ def grade_prioritize(action, email) -> tuple:
     try:
         # Validate action type
         if not hasattr(action, 'action_type') or action.action_type != "prioritize":
-            return 0.0, f"Wrong action_type '{getattr(action, 'action_type', 'None')}', expected 'prioritize'"
+            return 0.01, f"Wrong action_type '{getattr(action, 'action_type', 'None')}', expected 'prioritize'"
 
         # Validate action value
         if not hasattr(action, 'value') or action.value is None:
-            return 0.0, "Missing action value"
+            return 0.01, "Missing action value"
         
         answer = str(action.value).lower().strip()
         if not answer:
-            return 0.0, "Empty action value"
+            return 0.01, "Empty action value"
         
         expected = email.get("expected_priority", "medium")
     except Exception as e:
-        return 0.0, f"Error processing prioritization: {str(e)}"
+        return 0.01, f"Error processing prioritization: {str(e)}"
 
     if answer not in PRIORITY_SCORES:
         return 0.1, f"Invalid level '{answer}'. Use: critical / high / medium / low"
 
     if answer == expected:
-        return 1.0, f"Correct priority: {expected}"
+        return 0.95, f"Correct priority: {expected}"
 
     diff = abs(PRIORITY_SCORES[answer] - PRIORITY_SCORES[expected])
-    score = round(max(0.0, 1.0 - diff * 0.4), 2)
+    score = round(max(0.01, 0.95 - diff * 0.3), 2)
     return score, f"Expected '{expected}', got '{answer}' — partial credit"
 
 
@@ -174,19 +174,19 @@ def grade_reply(action, email) -> tuple:
     try:
         # Validate action type
         if not hasattr(action, 'action_type') or action.action_type != "reply":
-            return 0.0, f"Wrong action_type '{getattr(action, 'action_type', 'None')}', expected 'reply'"
+            return 0.01, f"Wrong action_type '{getattr(action, 'action_type', 'None')}', expected 'reply'"
 
         # Validate action value
         if not hasattr(action, 'value') or action.value is None:
-            return 0.0, "Missing action value"
+            return 0.01, "Missing action value"
         
         reply = str(action.value).strip()
         if not reply:
-            return 0.0, "Empty reply"
+            return 0.01, "Empty reply"
         if len(reply) < 20:
             return 0.1, "Reply too short to be useful"
     except Exception as e:
-        return 0.0, f"Error processing reply: {str(e)}"
+        return 0.01, f"Error processing reply: {str(e)}"
 
     score = 0.0
     reasons = []
@@ -202,7 +202,7 @@ def grade_reply(action, email) -> tuple:
 
     key_topics = _keywords(email.get("body", ""))
     matched = sum(1 for kw in key_topics if kw in reply.lower())
-    topic_score = min(0.4, matched * 0.1)
+    topic_score = min(0.35, matched * 0.1)
     score += topic_score
     if topic_score > 0:
         reasons.append(f"references {matched} relevant topic(s)")
@@ -212,8 +212,8 @@ def grade_reply(action, email) -> tuple:
         score += 0.2
         reasons.append("substantive response")
 
-    # Ensure score is always in valid range
-    final_score = round(min(1.0, max(0.0, score)), 2)
+    # Ensure score is always in valid range (0.01, 0.99)
+    final_score = round(min(0.95, max(0.01, score)), 2)
     return final_score, "; ".join(reasons) or "minimal reply"
 
 
@@ -245,12 +245,12 @@ class Task:
         """Grade an action with error handling."""
         try:
             score, reason = self.grader_fn(action, email)
-            # Ensure score is always in valid range [0.0, 1.0]
+            # Ensure score is always in valid range (0.01, 0.99) - STRICTLY between 0 and 1
             score = float(score)
-            score = min(1.0, max(0.0, score))
+            score = min(0.99, max(0.01, score))
             return score, str(reason)
         except Exception as e:
-            return 0.0, f"Grading error: {str(e)}"
+            return 0.01, f"Grading error: {str(e)}"
 
 
 # ── Task registry ─────────────────────────────────────────────────────────────

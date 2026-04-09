@@ -101,9 +101,9 @@ def _run_baseline_episode(client: OpenAI, model_name: str, task_id: str, max_ste
                 obs_obj, reward, done = env.step(action)
                 obs = obs_obj.__dict__
                 
-                # Ensure reward is in valid range
+                # Ensure reward is in valid range (0.01, 0.99)
                 reward = float(reward)
-                reward = min(1.0, max(0.0, reward))
+                reward = min(0.99, max(0.01, reward))
                 rewards.append(reward)
             except Exception as step_error:
                 # Log error but continue
@@ -156,9 +156,9 @@ def step(action: ActionRequest):
         act = EmailAction(action_type=action.action_type, value=action.value)
         obs, reward, done = env.step(act)
         
-        # Ensure reward is in valid range
+        # Ensure reward is in valid range (0.01, 0.99) - STRICTLY between 0 and 1
         reward = float(reward)
-        reward = min(1.0, max(0.0, reward))
+        reward = min(0.99, max(0.01, reward))
         
         return {
             "observation": obs.__dict__,
