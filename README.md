@@ -58,23 +58,28 @@ Data and task graders are defined in `email_triage_env/server/tasks.py`.
 
 ## How Scoring Works
 
-Each `step` returns reward between `0.0` and `1.0`. Final inference score is computed from step rewards in `inference.py`.
+Each `step` returns reward **strictly between 0.0 and 1.0** (exclusive). Final inference score is computed from step rewards in `inference.py`.
+
+**Important:** All scores are in the range **(0.01, 0.99)** to comply with OpenEnv requirements.
 
 Grader behavior:
 - Easy:
-  - `1.0` for correct class
-  - `0.2` for wrong class
-  - `0.0` for wrong action type
+  - `0.95` for correct classification
+  - `0.2` for incorrect classification
+  - `0.01` for wrong action type
 - Medium:
-  - `1.0` exact match
-  - partial credit for close priority levels
+  - `0.95` for exact match
+  - Partial credit (0.65, 0.35) for close priority levels
   - `0.1` for invalid label
+  - `0.01` for wrong action type
 - Hard:
-  - compositional score from relevance, structure, tone, and substance
+  - Compositional score from relevance, structure, tone, and substance
+  - Maximum score: `0.95`
+  - Minimum score: `0.01`
 
 Episode ends when:
-- perfect score on step (`1.0`), or
-- `MAX_STEPS` reached.
+- Near-perfect score on step (`>= 0.95`), or
+- `MAX_STEPS` (5) reached.
 
 ## Environment API
 
@@ -118,8 +123,18 @@ Interactive docs:
 ## Quick Start
 
 ```bash
+# Install dependencies
+pip install -r requirements.txt
+# OR
 pip install -e .
+
+# Run automated demo (starts server automatically)
+python demo.py
+
+# OR manually start server and run inference
 uvicorn server.app:app --host 0.0.0.0 --port 7860
+# In another terminal:
+export HF_TOKEN=your_token_here
 python inference.py --base-url http://localhost:7860
 ```
 
@@ -148,6 +163,8 @@ source .venv/bin/activate
 ### 3) Install dependencies
 ```bash
 python -m pip install --upgrade pip
+pip install -r requirements.txt
+# OR
 pip install -e .
 ```
 
@@ -158,6 +175,12 @@ uvicorn server.app:app --host 0.0.0.0 --port 7860
 
 ### 5) Open API docs
 Visit: `http://127.0.0.1:7860/docs`
+
+### 6) Run automated demo
+```bash
+# Demo automatically starts server, runs tests, and cleans up
+python demo.py
+```
 
 ## Step-by-Step Testing via Swagger UI
 

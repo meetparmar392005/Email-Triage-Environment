@@ -1,0 +1,11 @@
+# Core dependencies for Email Triage Environment
+openenv-core>=0.2.1
+fastapi>=0.104.0
+uvicorn>=0.24.0
+openai>=1.0.0
+httpx>=0.24.0
+pydantic>=2.0.0
+
+# Optional development dependencies
+# pytest>=7.0.0
+# pytest-cov>=4.0.0
